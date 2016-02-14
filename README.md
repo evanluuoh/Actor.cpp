@@ -1,9 +1,8 @@
-# Actor.cpp
-
 #include "Actor.h"
+#include "GraphObject.h"
 #include "StudentWorld.h"
 
-Actor::Actor(int imageID, int startX, int startY, Direction dir = right, double size, unsigned int depth)
+Actor::Actor(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth)
 	: GraphObject(imageID, startX, startY, dir, size, depth)
 {
 	setVisible(true);
@@ -23,10 +22,8 @@ Dirt::~Dirt()
 
 
 Person::Person(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, int health)
-	:Actor(imageID, startX, startY, dir, size, depth)
-{
-	m_health = health;
-}
+	:Actor(imageID, startX, startY, dir, size, depth), m_health(health)
+{}
 
 Person::~Person()
 {}
@@ -45,6 +42,7 @@ Frackman::~Frackman()
 {}
 
 void Frackman::doSomething()
-{
+{}
 
-}
+void Frackman::getAnnoyed()
+{}
