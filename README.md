@@ -4,9 +4,12 @@
 #include "StudentWorld.h"
 #include "GameConstants.h"
 
+
+
 Actor::Actor(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
 	: GraphObject(imageID, startX, startY, dir, size, depth), m_world(world)
 {
+	m_alive = true;
 	setVisible(true);
 }
 
@@ -19,17 +22,33 @@ StudentWorld* Actor::getWorld()
 	return m_world;
 }
 
+bool Actor::isAlive()
+{
+	return m_alive;
+}
+
+void Actor::makeDead()
+{
+	delete this;
+}
+
 
 Dirt::Dirt(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
-	: Actor(IID_DIRT, startX, startY, dir, 0.25, 3, getWorld())
+	: Actor(IID_DIRT, startX, startY, dir, 0.25, 3, world)
 {}
 
 Dirt::~Dirt()
 {}
 
+void Dirt::doSomething()
+{}
+
+void Dirt::getAnnoyed()
+{}
+
 
 Person::Person(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, int health)
-	:Actor(imageID, startX, startY, dir, size, depth, getWorld()), m_health(health)
+	:Actor(imageID, startX, startY, dir, size, depth, world), m_health(health)
 {}
 
 Person::~Person()
@@ -42,7 +61,7 @@ int Person::health()
 
 
 Frackman::Frackman(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, int health)
-	:Person(IID_PLAYER, 30, 60, right, 1, 0, getWorld(), 10)
+	:Person(IID_PLAYER, 30, 60, right, 1, 0, world, 10)
 {}
 
 Frackman::~Frackman()
@@ -50,29 +69,90 @@ Frackman::~Frackman()
 
 void Frackman::doSomething()
 {
-	if (health() == 0)
+	if (!isVisible())
 		return;
 	int ch;
-	//if ()
 	if (getWorld()->getKey(ch) == true)
 	{
 		// user hit a key this tick!
 		switch (ch)
 		{
 		case KEY_PRESS_LEFT:
-			moveTo(getX() - 1, getY());
-			break;
+			if (getDirection() != left)
+			{
+				setDirection(left);
+				break;
+			}
+			else
+			{
+				if (getX() > 0)
+				{
+					moveTo(getX() - 1, getY());
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
 		case KEY_PRESS_RIGHT:
-			moveTo(getX() + 1, getY());
-			break;
+			if (getDirection() != right)
+			{
+				setDirection(right);
+				break;
+			}
+			else
+			{
+				if (getX() < 60)
+				{
+					moveTo(getX() + 1, getY());
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
 		case KEY_PRESS_UP:
-			moveTo(getX(), getY() - 1);
-			break;
+			if (getDirection() != up)
+			{
+				setDirection(up);
+				break;
+			}
+			else
+			{
+				if (getY() < 60)
+				{
+					moveTo(getX(), getY() + 1);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
 		case KEY_PRESS_DOWN:
-			moveTo(getX(), getY() + 1);
-			break;
+			if (getDirection() != down)
+			{
+				setDirection(down);
+				break;
+			}
+			else
+			{
+				if (getY() > 0)
+				{
+					moveTo(getX(), getY() - 1);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
 		default:
-			break;
+			return;
+		}
+		for (int i = getX(); i < getX() + 4; i++)
+		{
+			for (int j = getY(); j < getY() + 4; j++)
+			{
+				if (getWorld()->isDirt(i, j))
+				{
+					getWorld()->removeDirt(i, j);
+				}
+			}
 		}
 	}
 }
