@@ -1,0 +1,292 @@
+#include "Actor.h"
+#include "GraphObject.h"
+#include "GameWorld.h"
+#include "StudentWorld.h"
+#include "GameConstants.h"
+#include <string>
+
+using namespace std;
+
+Actor::Actor(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	: GraphObject(imageID, startX, startY, dir, size, depth), m_world(world)
+{
+	m_alive = true;
+	setVisible(true);
+}
+
+Actor::~Actor()
+{}
+// Students:  Add code to this file (if you wish), Actor.h, StudentWorld.h, and StudentWorld.cpp
+
+StudentWorld* Actor::getWorld()
+{
+	return m_world;
+}
+
+bool Actor::isAlive()
+{
+	return m_alive;
+}
+
+void Actor::makeDead()
+{
+	delete this;
+}
+
+bool Actor::withinRadius(Actor* a, int radius)
+{
+	for (int i = getX(); i < getX() + radius; i++)
+	{
+		for (int j = getY(); j < getY() + radius; j++)
+		{
+			for (int k = a->getX(); k < a->getX() + radius; k++)
+			{
+				for (int l = a->getY(); l < a->getY() + radius; l++)
+				{
+					if (i == k && j == l)
+					{
+						return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+
+Dirt::Dirt(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	: Actor(IID_DIRT, startX, startY, dir, 0.25, 3, world)
+{}
+
+Dirt::~Dirt()
+{}
+
+void Dirt::doSomething()
+{}
+
+void Dirt::getAnnoyed()
+{}
+
+string Dirt::type()
+{
+	return "obstacle";
+}
+
+
+Person::Person(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, int health)
+	:Actor(imageID, startX, startY, dir, size, depth, world), m_health(health)
+{}
+
+Person::~Person()
+{}
+
+int Person::health()
+{
+	return m_health;
+}
+
+void Person::loseHealth(int health)
+{
+	m_health -= health;
+}
+
+string Person::type()
+{
+	return "person";
+}
+
+
+Frackman::Frackman(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, int health)
+	:Person(IID_PLAYER, 30, 60, right, 1, 0, world, 10), m_health(health)
+{}
+
+Frackman::~Frackman()
+{}
+
+void Frackman::doSomething()
+{
+	if (!isVisible())
+		return;
+	int ch;
+	if (getWorld()->getKey(ch) == true)
+	{
+		// user hit a key this tick!
+		switch (ch)
+		{
+		case KEY_PRESS_LEFT:
+			if (getDirection() != left)
+			{
+				setDirection(left);
+				break;
+			}
+			else
+			{
+				if (getX() > 0)
+				{
+					moveTo(getX() - 1, getY());
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		case KEY_PRESS_RIGHT:
+			if (getDirection() != right)
+			{
+				setDirection(right);
+				break;
+			}
+			else
+			{
+				if (getX() < 60)
+				{
+					moveTo(getX() + 1, getY());
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		case KEY_PRESS_UP:
+			if (getDirection() != up)
+			{
+				setDirection(up);
+				break;
+			}
+			else
+			{
+				if (getY() < 60)
+				{
+					moveTo(getX(), getY() + 1);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		case KEY_PRESS_DOWN:
+			if (getDirection() != down)
+			{
+				setDirection(down);
+				break;
+			}
+			else
+			{
+				if (getY() > 0)
+				{
+					moveTo(getX(), getY() - 1);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		default:
+			return;
+		}
+		bool soundPlayed = false;
+		for (int i = getX(); i < getX() + 4; i++)
+		{
+			for (int j = getY(); j < getY() + 4; j++)
+			{
+				if (getWorld()->isDirt(i, j))
+				{
+					getWorld()->removeDirt(i, j);
+					if (soundPlayed == false)
+					{
+						getWorld()->playSound(SOUND_DIG);
+						soundPlayed = true;
+					}
+				}
+			}
+		}
+	}
+}
+
+void Frackman::getAnnoyed()
+{
+	loseHealth(2);
+	if (health() <= 0)
+	{
+		makeDead();
+		getWorld()->playSound(SOUND_PLAYER_GIVE_UP);
+	}
+}
+
+
+Boulder::Boulder(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	:Actor(IID_BOULDER, startX, startY, down, 1.0, 1, getWorld())
+{
+	m_status = "stable";
+	for (int i = getX(); i < getX() + 4; i++)
+	{
+		for (int j = getY(); j < getY() + 4; j++)
+		{
+			if (getWorld()->isDirt(i, j))
+			{
+				getWorld()->removeDirt(i, j);
+			}
+		}
+	}
+}
+
+Boulder::~Boulder()
+{}
+
+void Boulder::doSomething()
+{
+	int count = 0;
+	if (isAlive())
+		return;
+	if (m_status == "stable")
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			if (getWorld()->isDirt(getX() + i, getY() - 1))
+			{
+				return;
+			}
+			else
+			{
+				m_status = "waiting";
+				return;
+			}
+		}
+	}
+	if (m_status == "waiting")
+	{
+		count++;
+		if (count == 30)
+		{
+			m_status = "falling";
+			getWorld()->playSound(SOUND_FALLING_ROCK);
+			return;
+		}
+	}
+	if (m_status == "falling")
+	{
+		moveTo(getX(), getY() + 1);
+		if (getY() == 0)
+		{
+			makeDead();
+		}
+		if (getWorld()->collidesWith(this, 3) == "obstacle")
+		{
+			makeDead();
+		}
+		//if (getWorld()->collidesWith(this, 3) == "person")
+		//{
+
+		//}
+	}
+}
+
+void Boulder::getAnnoyed()
+{}
+
+string Boulder::status()
+{
+	return m_status;
+}
+
+string Boulder::type()
+{
+	return "obstacle";
+}
