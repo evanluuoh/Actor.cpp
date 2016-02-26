@@ -1,0 +1,888 @@
+#include "Actor.h"
+#include "GraphObject.h"
+#include "GameWorld.h"
+#include "StudentWorld.h"
+#include "GameConstants.h"
+#include <algorithm>
+#include <string>
+
+using namespace std;
+
+//All actors start out alive and visible
+Actor::Actor(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	: GraphObject(imageID, startX, startY, dir, size, depth), m_world(world)
+{
+	m_alive = true;
+	setVisible(true);
+}
+
+Actor::~Actor()
+{}
+
+StudentWorld* Actor::getWorld()
+{
+	return m_world;
+}
+
+bool Actor::isAlive()
+{
+	return m_alive;
+}
+
+void Actor::makeDead()
+{
+	m_alive = false;
+}
+
+//if Actor a is within radius of this, return true; else, return false
+bool Actor::withinRadius(Actor* a, int radius)
+{
+	for (int i = getX(); i <= getX() + radius; i++)
+	{
+		for (int j = getY(); j <= getY() + radius; j++)
+		{
+			for (int k = a->getX(); k <= a->getX() + radius; k++)
+			{
+				for (int l = a->getY(); l <= a->getY() + radius; l++)
+				{
+					if (i == k && j == l)
+					{
+						return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+bool Actor::isCollectible() //default all actors to non-collectible
+{
+	return false;
+}
+
+void Actor::moveInDirection(Direction dir)
+{
+	switch (dir)
+	{
+	case left:
+		moveTo(getX() - 1, getY());
+		break;
+	case right:
+		moveTo(getX() + 1, getY());
+		break;
+	case up:
+		moveTo(getX(), getY() + 1);
+		break;
+	case down:
+		moveTo(getX(), getY() - 1);
+		break;
+	default:
+		return;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////
+
+Dirt::Dirt(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	: Actor(IID_DIRT, startX, startY, dir, 0.25, 3, world)
+{}
+
+Dirt::~Dirt()
+{}
+
+void Dirt::doSomething()
+{}
+
+void Dirt::getAnnoyed()
+{}
+
+string Dirt::type()
+{
+	return "obstacle";
+}
+
+void Dirt::loseHealth(double health)
+{}
+
+void Dirt::getHitByRock()
+{}
+
+void Dirt::getBribed()
+{}
+
+//////////////////////////////////////////////////////////////////////
+
+Person::Person(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, double health)
+	:Actor(imageID, startX, startY, dir, size, depth, world), m_health(health)
+{
+	rockHit = false;
+}
+
+Person::~Person()
+{}
+
+double Person::health()
+{
+	return m_health;
+}
+
+void Person::loseHealth(double health)
+{
+	m_health -= health;
+}
+
+string Person::type()
+{
+	return "person";
+}
+
+void Person::getHitByRock()
+{
+	rockHit = true;
+}
+
+bool Person::hitByRock()
+{
+	return rockHit;
+}
+
+void Person::getBribed()
+{}
+
+//////////////////////////////////////////////////////////////////////
+
+Frackman::Frackman(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, int health)
+	:Person(IID_PLAYER, 30, 60, right, 1, 0, world, 10)
+{}
+
+Frackman::~Frackman()
+{}
+
+void Frackman::doSomething()
+{
+	if (!isAlive())
+		return;
+	int ch;
+	if (getWorld()->getKey(ch) == true)
+	{
+		// user hit a key this tick!
+		switch (ch)
+		{
+		case KEY_PRESS_LEFT:
+			if (getDirection() != left) //if the player isn't facing the direction of the pressed key, change to that direction
+			{
+				setDirection(left);
+				break;
+			}
+			else
+			{
+				if (getX() > 0 && !(getWorld()->hitsRock(this, left))) //makes sure player isn't trying to walk into a rock or boundary
+				{
+					moveInDirection(left);
+				}
+				else
+					moveTo(getX(), getY()); //if he is, run the move animation, but dont actually move anywhere
+				break;
+			}
+		case KEY_PRESS_RIGHT:
+			if (getDirection() != right)
+			{
+				setDirection(right);
+				break;
+			}
+			else
+			{
+				if (getX() < 60 && !(getWorld()->hitsRock(this, right)))
+				{
+					moveInDirection(right);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		case KEY_PRESS_UP:
+			if (getDirection() != up)
+			{
+				setDirection(up);
+				break;
+			}
+			else
+			{
+				if (getY() < 60 && !(getWorld()->hitsRock(this, up)))
+				{
+					moveInDirection(up);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		case KEY_PRESS_DOWN:
+			if (getDirection() != down)
+			{
+				setDirection(down);
+				break;
+			}
+			else
+			{
+				if (getY() > 0 && !(getWorld()->hitsRock(this, down)))
+				{
+					moveInDirection(down);
+				}
+				else
+					moveTo(getX(), getY());
+				break;
+			}
+		case KEY_PRESS_SPACE:
+			if (getWorld()->countWater() > 0)
+			{
+				getWorld()->shootWater(getDirection(), getX(), getY());
+			}
+			break;
+		case KEY_PRESS_TAB:
+			getWorld()->dropGold(getX(), getY());
+			break;
+		case 90:
+		case 122:
+			getWorld()->scan();
+			break;
+		case KEY_PRESS_ESCAPE:
+			makeDead();
+			break;
+		default:
+			return;
+		}
+		bool soundPlayed = false; //checks if sound for digging dirt has been played
+		for (int i = getX(); i < getX() + 4; i++)
+		{
+			for (int j = getY(); j < getY() + 4; j++)
+			{
+				if (getWorld()->isDirt(i, j))
+				{
+					getWorld()->removeDirt(i, j); //removes dirt in all the space the player takes up after moving
+					if (soundPlayed == false)
+					{
+						getWorld()->playSound(SOUND_DIG); //ensures the dig sound is played only once
+						soundPlayed = true;
+					}
+				}
+			}
+		}
+	}
+}
+
+void Frackman::getAnnoyed()
+{
+	if (hitByRock())
+		makeDead();
+	else
+		loseHealth(2); //if Frackman gets annoyed by a Protestor, lose 2 health
+	if (health() <= 0) //Frackman dies once health goes to 0 or below
+	{
+		makeDead();
+		getWorld()->playSound(SOUND_PLAYER_GIVE_UP);
+	}
+}
+
+
+
+//////////////////////////////////////////////////////////////////////
+
+Boulder::Boulder(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	:Actor(IID_BOULDER, startX, startY, down, 1.0, 1, world)
+{
+	m_status = "stable"; //boulders start off stable
+	countWaiting = 0; //keeps track of ticks when it will be in waiting state
+	for (int i = getX(); i < getX() + 4; i++)
+	{
+		for (int j = getY(); j < getY() + 4; j++)
+		{
+			getWorld()->removeDirt(i, j); //remove all dirt in the spaces where boulders are
+		}
+	}
+}
+
+Boulder::~Boulder()
+{}
+
+void Boulder::doSomething()
+{
+	if (!isAlive())
+		return;
+	if (m_status == "stable")
+	{
+		for (int i = getX(); i < getX() + 4; i++)
+		{
+			if (getWorld()->isDirt(i, getY() - 1)) //if there is still dirt below the boulder, do nothing
+			{
+				return;
+			}
+		}
+		m_status = "waiting"; //else switch to waiting state
+		return;
+	}
+	if (m_status == "waiting")
+	{
+		countWaiting++; //for every tick in waiting state, add one to countWaiting
+		if (countWaiting == 30) //once it hits 30, start falling
+		{
+			getWorld()->playSound(SOUND_FALLING_ROCK);
+			m_status = "falling";
+			return;
+		}
+		return;
+	}
+	if (m_status == "falling") //keep falling until it hits an obstacle or boundary
+	{
+		moveInDirection(down);
+		getWorld()->collide(this, 3);
+		if (getY() == 0)
+		{
+			makeDead();
+		}
+
+	}
+}
+
+void Boulder::getAnnoyed()
+{}
+
+string Boulder::status()
+{
+	return m_status;
+}
+
+string Boulder::type()
+{
+	return "rock";
+}
+
+void Boulder::loseHealth(double health)
+{}
+
+void Boulder::getHitByRock()
+{}
+
+void Boulder::getBribed()
+{}
+
+//////////////////////////////////////////////////////////////////////
+
+Squirt::Squirt(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	: Actor(IID_WATER_SPURT, startX, startY, dir, 1.0, 1, world)
+{
+	m_health = 4; //squirts can only travel 4 squares
+}
+
+Squirt::~Squirt()
+{}
+
+void Squirt::doSomething()
+{
+	Direction dir = getDirection();
+	if (!isAlive())
+		return;
+	getWorld()->collide(this, 3); //checks if the squirt collides with anything
+	if (isAlive()) //if it doesn't, just move in the target direction
+	{
+		moveInDirection(dir);
+		m_health--; //lose one health every time it moves
+		if (m_health == 0)
+			makeDead();
+	}
+}
+
+void Squirt::getAnnoyed()
+{}
+
+string Squirt::type()
+{
+	return "water";
+}
+
+void Squirt::loseHealth(double health)
+{}
+
+void Squirt::getHitByRock()
+{}
+
+void Squirt::getBribed()
+{}
+
+//////////////////////////////////////////////////////////////////////
+
+Goodie::Goodie(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	:Actor(imageID, startX, startY, dir, size, depth, world)
+{
+	//setVisible(false); //all goodies are invisible
+}
+
+Goodie::~Goodie()
+{}
+
+bool Goodie::isCollectible() //all goodies are collectible
+{
+	return true;
+}
+
+void Goodie::getHitByRock()
+{}
+
+void Goodie::getBribed()
+{}
+
+//////////////////////////////////////////////////////////////////////
+
+Barrel::Barrel(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	:Goodie(IID_BARREL, startX, startY, right, 1.0, 2, world)
+{
+	//setVisible(true);
+}
+
+Barrel::~Barrel()
+{}
+
+void Barrel::doSomething()
+{
+	if (!isAlive())
+		return;
+	getWorld()->detectGoodie(this);
+	getWorld()->collectGoodie(this);
+}
+
+void Barrel::getAnnoyed()
+{}
+
+void Barrel::loseHealth(double health)
+{}
+
+string Barrel::type()
+{
+	return "oil";
+}
+
+//////////////////////////////////////////////////////////////////////
+
+Nugget::Nugget(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	:Goodie(IID_GOLD, startX, startY, right, 1.0, 2, world)
+{
+	m_discovered = false;
+	m_lifetime = 100;
+}
+
+Nugget::~Nugget()
+{}
+
+void Nugget::doSomething()
+{
+	if (!isAlive())
+		return;
+	if (!isDiscovered())
+	{
+		getWorld()->detectGoodie(this);
+		getWorld()->collectGoodie(this);
+	}
+	if (isDiscovered())
+	{
+		getWorld()->bribeProtester(this);
+		m_lifetime--;
+		if (m_lifetime == 0)
+			makeDead();
+	}
+}
+
+void Nugget::getAnnoyed()
+{}
+
+void Nugget::loseHealth(double health)
+{}
+
+string Nugget::type()
+{
+	return "gold";
+}
+
+bool Nugget::isDiscovered()
+{
+	return m_discovered;
+}
+
+void Nugget::setDiscovered()
+{
+	m_discovered = true;
+}
+
+//////////////////////////////////////////////////////////////////////
+
+Sonar::Sonar(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	:Goodie(IID_SONAR, startX, startY, right, 1.0, 2, world)
+{
+	setVisible(true);
+	m_lifetime = 300 - 10 * (getWorld()->getLevel());
+	if (m_lifetime < 100)
+		m_lifetime = 100;
+}
+
+Sonar::~Sonar()
+{}
+
+void Sonar::doSomething()
+{
+	if (!isAlive())
+		return;
+	getWorld()->collectGoodie(this);
+	m_lifetime--;
+	if (m_lifetime == 0)
+		makeDead();
+}
+
+void Sonar::getAnnoyed()
+{}
+
+void Sonar::loseHealth(double health)
+{}
+
+string Sonar::type()
+{
+	return "sonar";
+}
+
+//////////////////////////////////////////////////////////////////////
+
+Pool::Pool(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world)
+	: Goodie(IID_WATER_POOL, startX, startY, right, 1.0, 2, world)
+{
+	setVisible(true);
+	m_lifetime = max(100, 300 - 10 * static_cast<int>(getWorld()->getLevel()));
+}
+
+Pool::~Pool()
+{}
+
+void Pool::doSomething()
+{
+	if (!isAlive())
+		return;
+	getWorld()->collectGoodie(this);
+	m_lifetime--;
+	if (m_lifetime == 0)
+		makeDead();
+}
+
+void Pool::getAnnoyed()
+{}
+
+void Pool::loseHealth(double health)
+{}
+
+string Pool::type()
+{
+	return "pool";
+}
+
+//////////////////////////////////////////////////////////////////////
+
+Protester::Protester(int imageID, int startX, int startY, Direction dir, double size, unsigned int depth, StudentWorld* world, double health)
+	: Person(IID_PROTESTER, 60, 60, left, 1.0, 0, world, 5.0)
+{
+	resetTravelDistance();
+	resetWaitTicks();
+	resetShoutTicks();
+	turningTicks = 0;
+	m_state = "active";
+}
+
+Protester::~Protester()
+{}
+
+void Protester::doSomething()
+{
+	if (!isAlive())
+		return;
+	if (m_state == "resting") //when resting, wait until can be active again
+	{
+		waitingTicks--;
+		if (waitingTicks <= 0)
+			m_state = "active";
+	}
+	if (m_state == "give up")
+	{
+		if (getX() == 60 && getY() == 60)
+			makeDead();
+		else
+		{
+			int stepsAround[4] = { getWorld()->getStepsToExit(getX() + 1, getY()), getWorld()->getStepsToExit(getX() - 1, getY()),
+				getWorld()->getStepsToExit(getX(), getY() + 1), getWorld()->getStepsToExit(getX(), getY() - 1) };
+			int lowestSteps = stepsAround[0];
+			int lowestIndex = 0;
+			for (int i = 1; i < 4; i++)
+			{
+				if (stepsAround[0] < lowestSteps)
+				{
+					stepsAround[0] = lowestSteps;
+					lowestIndex = i;
+				}
+			}
+			cout << lowestSteps << endl;
+			switch (lowestIndex)
+			{
+			case 0:
+				moveInDirection(right);
+				break;
+			case 1:
+				moveInDirection(left);
+				break;
+			case 2:
+				moveInDirection(up);
+				break;
+			case 3:
+				moveInDirection(down);
+				break;
+			default:
+				break;
+			}
+		}
+	}
+	if (m_state == "dead end")
+	{
+		travelDistance = 0; //when travel distance is 0, calls getNewDirection
+		m_state = "active";
+		return; //returns so protester acts on the next tick
+	}
+	if (m_state == "active")
+	{
+		if (getWorld()->canShout(this, getDirection()) && shoutingTicks <= 0) //if Protester is next to Frackman and is ready to shout
+		{
+			getWorld()->frackOff(this);
+			resetShoutTicks();
+		}
+		else if (getWorld()->hasLineOfSight(this) != none) //else if Protester cant shout, but still has line of sight
+		{
+			travelDistance = 0;
+			moveTowardPlayer(getWorld()->hasLineOfSight(this));
+		}
+		else //if protester has no line of sight
+		{
+			if (travelDistance <= 0) //if travelDistance is non-positive
+			{
+				setDirection(getNewDirection()); //sets new random direction
+				resetTravelDistance();
+				moveInDirection(getDirection()); //moves in new direction
+			}
+			else if (canTurn() && getTurnTicks() <= 0) //if travelDistance is positive, and at an intersection
+			{
+				setDirection(turns()); //sets new random direction
+				resetTravelDistance();
+				resetTurnTicks();
+				moveInDirection(getDirection()); //moves in new direction
+			}
+			else if (!getWorld()->pathValid(this, getDirection())) //if the path in the current direction is invalid (meaning the protester has hit an obstacle or edge of map)
+			{
+				m_state = "dead end";
+			}
+			else //if travelDistance is positive, not at intersection, and current path is NOT invalid
+			{
+				moveInDirection(getDirection()); //just move
+			}
+		} //increments all non-resting ticks by -1, and resets wait ticks so
+		shoutingTicks--;
+		turningTicks--;
+		if (m_state != "dead end") //if protester is not waiting at a dead end, make him rest
+			m_state = "resting";
+		resetWaitTicks();
+
+	}
+}
+
+void Protester::getAnnoyed()
+{
+	if (m_state == "give up")
+	{
+		return;
+	}
+
+	if (hitByRock())
+	{
+		loseHealth(100.0);
+		getWorld()->increaseScore(500);
+		waitingTicks = 0;
+		m_state = "give up";
+		getWorld()->playSound(SOUND_PROTESTER_GIVE_UP);
+	}
+	else
+	{
+		loseHealth(2.0);
+		if (health() <= 0)
+		{
+			getWorld()->increaseScore(100);
+			m_state = "give up";
+			getWorld()->playSound(SOUND_PROTESTER_GIVE_UP);
+		}
+		else
+		{
+			getWorld()->playSound(SOUND_PROTESTER_ANNOYED);
+			waitingTicks = max(50, 100 - (static_cast<int>(getWorld()->getLevel()) * 10));
+		}
+	}
+}
+
+string Protester::type()
+{
+	return "protester";
+}
+
+int Protester::getShoutTicks()
+{
+	return shoutingTicks;
+}
+
+int Protester::getTurnTicks()
+{
+	return turningTicks;
+}
+
+void Protester::resetWaitTicks()
+{
+	waitingTicks = max(0, 3 - (static_cast<int>(getWorld()->getLevel()) / 4));
+}
+
+void Protester::resetShoutTicks()
+{
+	shoutingTicks = 15;
+}
+
+void Protester::resetTurnTicks()
+{
+	turningTicks = 200;
+}
+
+void Protester::resetTravelDistance()
+{
+	travelDistance = rand() % 52 + 8;
+}
+
+void Protester::moveTowardPlayer(Direction dir) //if not facing player, turns to player before moving
+{
+	if (dir == getDirection())
+		moveInDirection(dir);
+	else
+	{
+		setDirection(dir);
+		moveInDirection(dir);
+	}
+}
+
+bool Protester::canTurn() //returns true if the protester is at an intersection
+{
+	if (getDirection() == left || getDirection() == right) //if the protester is facing left or right
+	{
+		if (getWorld()->pathValid(this, up) || getWorld()->pathValid(this, down)) //if the up or down paths are valid, return true
+		{
+			return true;
+		}
+		return false;
+	}
+	else
+	{
+		if (getWorld()->pathValid(this, left) || getWorld()->pathValid(this, right)) //and vice versa
+		{
+			return true;
+		}
+		return false;
+	}
+}
+
+GraphObject::Direction Protester::turns()
+{
+	Direction dir = getDirection();
+	switch (dir)
+	{
+	case left:
+	case right: //if the protester is facing left or right
+		if (getWorld()->pathValid(this, up) && getWorld()->pathValid(this, down)) //if both up and down are valid
+		{
+			int random = rand() % 1; //returns either 0 or 1
+			if (random == 0) //if 0 returns up, if 1 returns down
+				return up;
+			return down;
+		}
+		else if (getWorld()->pathValid(this, up) && !(getWorld()->pathValid(this, down))) //else if just up is valid
+			return up; //return up
+		else //else, just down is valid, so return down
+			return down;
+	case up:
+	case down:
+		if (getWorld()->pathValid(this, left) && getWorld()->pathValid(this, right)) //and vice versa
+		{
+			int random = rand() % 1;
+			if (random == 0)
+				return left;
+			return right;
+		}
+		else if (getWorld()->pathValid(this, left) && !(getWorld()->pathValid(this, right)))
+			return left;
+		else
+			return right;
+	default:
+		return dir;
+	}
+}
+
+GraphObject::Direction Protester::getNewDirection() //chooses a random direction that has a valid path
+{
+	int random = rand() % 3; //first picks a random direction
+	if (random == 0 && getWorld()->pathValid(this, left)) //checks the random direction if its path is valid
+	{
+		return left;
+	}
+	if (random == 1 && getWorld()->pathValid(this, right))
+	{
+		return right;
+	}
+	if (random == 2 && getWorld()->pathValid(this, up))
+	{
+		return up;
+	}
+	if (random == 3 && getWorld()->pathValid(this, down))
+	{
+		return down;
+	}
+	else //if the path is invalid, run getNewDirection again
+		return getNewDirection();
+}
+
+bool Protester::facingEdge(Direction dir) //returns true if the protester is facing the edge of the map in the determined direction
+{
+	switch (dir)
+	{
+	case left:
+		if (getX() <= 0)
+			return true;
+		else
+			return false;
+	case right:
+		if (getX() >= 60)
+			return true;
+		else
+			return false;
+	case up:
+		if (getY() >= 60)
+			return true;
+		else
+			return false;
+	case down:
+		if (getY() <= 0)
+			return true;
+		else
+			return false;
+	default:
+		return false;
+	}
+}
+
+void Protester::getBribed()
+{
+	m_state = "give up";
+	getWorld()->playSound(SOUND_PROTESTER_FOUND_GOLD);
+	getWorld()->increaseScore(25);
+}
